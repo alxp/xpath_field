@@ -1,0 +1,148 @@
+<?php
+
+function xpath_field_field_info() {
+
+  return array(
+    'xpath' => array(
+      'label' => 'XPath Fragment',
+      'description' => t('Pick out a fragment of XML from an XML field instance.'),
+      'default_widget' => 'text_textfield',
+      'default_formatter' => 'xpath_fragment_text',
+    )
+  );
+}
+
+function xpath_field_field_widget_info() {
+  return array(
+    'xpath' => array(
+      'label' => t('XPath text'),
+      'field types' => array('xpath'),
+    )
+  );
+}
+
+function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+
+  $widget = $element;
+  $widget['#delta'] = $delta;
+  $xpath = $instance['widget']['settings']['xpath'];
+  
+  switch ($instance['widget']['type']) {
+    case 'xpath':
+
+      $entity = isset($element['#entity']) ? $element['#entity'] : NULL;
+
+      if ($entity) {
+        // We are attached to a node, and not in the widget instance settings form.
+        $xml_field_instance = isset($instance['widget']['settings']['xml_field_instance']) ? $instance['widget']['settings']['xml_field_instance'] : NULL;
+
+        if ($xml_field_instance) {
+          $lang = $entity->language;
+
+          foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
+            $xml = $xml_field_data['xml'];
+            $fragment = xpath_field_get_xpath_fragment($xml_field_data['xml'], $xpath);
+          }
+        }
+        
+        $element = array();
+        $element['xpath_element'] = array(
+          '#type' => 'textfield',
+          '#title' => $instance['label'] . " (Derrived)",
+          '#enabled' => FALSE,
+        );
+
+        $element['xpath_element']['#value'] = (string) $fragment[0];
+        break;
+      }
+  }
+
+  return $element;
+}
+
+function xpath_field_field_formatter_info() {
+  return array(
+    // This formatter just displays the hex value in the color indicated.
+    'xpath_snippet_preview' => array(
+      'label' => t('Simple text-based formatter'),
+      'field types' => array('xpath'),
+    ),
+  );
+}
+
+function xpath_field_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element = array();
+
+  switch ($display['type']) {
+    // This formatter simply outputs the field as text and with a color.
+    case 'xml_field_simple_text':
+      foreach ($items as $delta => $item) {
+        $element[$delta] = array(
+          // We create a render array to produce the desired markup,
+          // "<p style="color: #hexcolor">The color code ... #hexcolor</p>".
+          // See theme_html_tag().
+          '#type' => 'html_tag',
+          '#tag' => 'p',
+          '#attributes' => array(
+            'style' => 'color: ' . $item['rgb'],
+          ),
+          '#value' => t('The color code in this field is @code', array('@code' => $item['rgb'])),
+        );
+      }
+      break;
+  }
+
+  return $element;
+}
+
+/**
+ * Implement hook_field_widget_settings_form().
+ */
+function xpath_field_field_widget_settings_form($field, $instance) {
+
+  $widget = $instance['widget'];
+  $settings = $widget['settings'];
+
+  $form = array();
+  $form['xml_field_instance'] = array(
+    '#type' => 'select',
+    '#title' => t('Attach to XML Field'),
+    '#description' => t('Select the XML field instance on this content type to grab an XPath value from.'),
+  );
+
+  $xml_field_instances = array();
+  foreach (field_info_field_map() as $index => $other_field) {
+    if ($other_field['type'] == 'xml_field_xml') {
+      foreach ($other_field['bundles'] as $other_field_bundle_type_name => $other_field_bundle_type) {
+        foreach ($other_field_bundle_type as $other_field_bundle) {
+          if ($other_field_bundle == $instance['bundle']) {
+            $field_info = field_info_instance($other_field_bundle_type_name, $index, $other_field_bundle);
+            $form['xml_field_instance']['#options'][$index] = $field_info['label'] . " ($index)";
+          }
+        }
+      }
+    }
+  }
+
+  if (array_key_exists('xml_field_instance', $settings)) {
+    $form['xml_field_instance']['#default_value'] = $settings['xml_field_instance'];
+  }
+
+  $form['xpath'] = array(
+    '#type' => 'textfield',
+    '#title' => t('XPath value'),
+    '#description' => t('Enter the XPath to select a fragment from the XML Field instance.'),
+    '#default_value' => array_key_exists('xpath', $settings) ? $settings['xpath'] : '',
+  );
+  return $form;
+}
+
+function xpath_field_field_is_empty($item, $field) {
+  return empty($item['xpath']);
+}
+
+function xpath_field_get_xpath_fragment($xml_string, $xpath) {
+  $xml = new SimpleXMLElement($xml_string);
+  $result = $xml->xpath($xpath);
+  return $result;
+}
