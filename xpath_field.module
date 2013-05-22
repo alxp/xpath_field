@@ -3,20 +3,20 @@
 function xpath_field_field_info() {
 
   return array(
-    'xpath' => array(
+    'xpath_field_xpath' => array(
       'label' => 'XPath Fragment',
       'description' => t('Pick out a fragment of XML from an XML field instance.'),
       'default_widget' => 'text_textfield',
-      'default_formatter' => 'xpath_fragment_text',
+      'default_formatter' => 'xpath_field_safe',
     )
   );
 }
 
 function xpath_field_field_widget_info() {
   return array(
-    'xpath' => array(
+    'xpath_field_xpath' => array(
       'label' => t('XPath text'),
-      'field types' => array('xpath'),
+      'field types' => array('xpath_field_xpath'),
     )
   );
 }
@@ -28,7 +28,7 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
   $xpath = $instance['widget']['settings']['xpath'];
   
   switch ($instance['widget']['type']) {
-    case 'xpath':
+    case 'xpath_field_xpath':
 
       $entity = isset($element['#entity']) ? $element['#entity'] : NULL;
 
@@ -63,19 +63,23 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
 function xpath_field_field_formatter_info() {
   return array(
     // This formatter just displays the hex value in the color indicated.
-    'xpath_snippet_preview' => array(
+    'xpath_field_safe' => array(
       'label' => t('Simple text-based formatter'),
-      'field types' => array('xpath'),
+      'field types' => array('xpath_field_xpath'),
     ),
   );
 }
 
+function xpath_field_field_validate($element, $form_state) {
+  return TRUE;
+}
+
 function xpath_field_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
   $element = array();
-
+dpm($items);
   switch ($display['type']) {
     // This formatter simply outputs the field as text and with a color.
-    case 'xml_field_simple_text':
+    case 'xpath_field_xpath':
       foreach ($items as $delta => $item) {
         $element[$delta] = array(
           // We create a render array to produce the desired markup,
@@ -138,7 +142,7 @@ function xpath_field_field_widget_settings_form($field, $instance) {
 }
 
 function xpath_field_field_is_empty($item, $field) {
-  return empty($item['xpath']);
+  return FALSE;
 }
 
 function xpath_field_get_xpath_fragment($xml_string, $xpath) {
