@@ -60,8 +60,7 @@ function xpath_field_field_storage_info() {
 
 function xpath_field_field_storage_load($entity_type, $entities, $age, $fields, $options) {
   $load_current = $age == FIELD_LOAD_CURRENT;
-dpm($fields);
-return;
+
   foreach ($fields as $field_id => $ids) {
     // By the time this hook runs, the relevant field definitions have been
     // populated and cached in FieldInfo, so calling field_info_field_by_id()
@@ -69,39 +68,27 @@ return;
     // memory upfront with field_info_field_by_ids().
     $field = field_info_field_by_id($field_id);
     $field_name = $field['field_name'];
-    $table = $load_current ? _field_sql_storage_tablename($field) : _field_sql_storage_revision_tablename($field);
+    foreach($entities as $entity_id => $entity) {
 
-    $query = db_select($table, 't')->fields('t')->condition('entity_type', $entity_type)->condition($load_current ? 'entity_id' : 'revision_id', $ids, 'IN')->condition('language', field_available_languages($entity_type, $field), 'IN')->orderBy('delta');
-
-    if (empty($options['deleted'])) {
-      $query->condition('deleted', 0);
-    }
-
-    $results = $query->execute();
-
-    $delta_count = array();
-    foreach ($results as $row) {
-      if (!isset($delta_count[$row->entity_id][$row->language])) {
-        $delta_count[$row->entity_id][$row->language] = 0;
-      }
-
-      if ($field['cardinality'] == FIELD_CARDINALITY_UNLIMITED || $delta_count[$row->entity_id][$row->language] < $field['cardinality']) {
-        $item = array();
-        // For each column declared by the field, populate the item
-        // from the prefixed database column.
-        foreach ($field['columns'] as $column => $attributes) {
-          $column_name = _field_sql_storage_columnname($field_name, $column);
-          $item[$column] = $row->$column_name;
+        $field_instance = field_info_instance($entity_type, $field_name, $entity->type);
+        $xml_field_instance = isset($field_instance['widget']['settings']['xml_field_instance']) ? $field_instance['widget']['settings']['xml_field_instance'] : NULL;
+      
+        if ($xml_field_instance) {
+          $lang = $entity->language;
+          $xpath = _xpath_field_instance_xpath($field_instance);
+          foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
+            $xml = $xml_field_data['xml'];
+            $fragment = xpath_field_get_xpath_fragment($xml_field_data['xml'], $xpath);
+          }
         }
-
-        // Add the item to the field values for the entity.
-        $entities[$row->entity_id]->{$field_name}[$row->language][] = $item;
-        $delta_count[$row->entity_id][$row->language]++;
-      }
-    }
+      
+      
+      // Add the item to the field values for the entity.
+      // TODO: Fix language code.
+      $entities[$entity_id]->{$field_name}{$entity->language}[] = (string) $fragment[0];
+    }    
   }
 }
-
 
 function xpath_field_field_widget_info() {
   return array(
@@ -112,11 +99,15 @@ function xpath_field_field_widget_info() {
   );
 }
 
+function _xpath_field_instance_xpath(array $instance) {
+  return isset($instance['widget']['settings']['xpath']) ? $instance['widget']['settings']['xpath'] : '';
+}
+
 function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
 
   $widget = $element;
   $widget['#delta'] = $delta;
-  $xpath = isset($instance['widget']['settings']['xpath']) ? $instance['widget']['settings']['xpath'] : '';
+  $xpath = _xpath_field_instance_xpath($instance);
   
   switch ($instance['widget']['type']) {
     case 'xpath_field_xpath':
@@ -175,12 +166,12 @@ function xpath_field_field_formatter_view($entity_type, $entity, $field, $instan
       $element[0] = array(
         
         '#type' => 'markup',
-        '#markup' => 'Hi.',
+        '#markup' => $items[0],
       );
 
       break;
   }
-dpm($element);
+
   return $element;
 }
 
