@@ -8,9 +8,100 @@ function xpath_field_field_info() {
       'description' => t('Pick out a fragment of XML from an XML field instance.'),
       'default_widget' => 'text_textfield',
       'default_formatter' => 'xpath_field_safe',
-    )
+      'storage' => array(
+        'type' => 'xpath_field_storage',
+        'settings' => array(),
+        'module' => 'xpath_field',
+        'active' => 1,
+      ),
+    ),
   );
 }
+
+function xpath_field_field_create_field($field) {
+  if ($field['type'] == 'xpath_field_xpath') {
+    $field['storage'] = array(
+        'type' => 'xpath_field_storage',
+        'settings' => array(),
+        'module' => 'xpath_field',
+        'active' => 1,
+    );
+
+    // Build record to update.
+    $record = array(
+      'id' => $field['id'],
+      'storage_type' => $field['storage']['type'],
+      'storage_module' => $field['storage']['module'],
+      'storage_active' => $field['storage']['active'],
+    );
+
+    // Update the field storage.
+    $primary_key = array('id');
+    drupal_write_record('field_config', $record, $primary_key);
+  }
+}
+
+/**
+* Implements hook_field_update_field().
+*/
+function xml_field_field_update_field($field) {
+  xpath_field_field_create_field($field);
+}
+
+function xpath_field_field_storage_info() {
+  return array(
+    'xpath_field_storage' => array(
+      'label' => t('XPath derrived field storage'),
+      'description' => t('Transparent storage of derrived XPath fragments.'),
+      'settings' => array(),
+    ),
+  );
+}
+
+function xpath_field_field_storage_load($entity_type, $entities, $age, $fields, $options) {
+  $load_current = $age == FIELD_LOAD_CURRENT;
+dpm($fields);
+return;
+  foreach ($fields as $field_id => $ids) {
+    // By the time this hook runs, the relevant field definitions have been
+    // populated and cached in FieldInfo, so calling field_info_field_by_id()
+    // on each field individually is more efficient than loading all fields in
+    // memory upfront with field_info_field_by_ids().
+    $field = field_info_field_by_id($field_id);
+    $field_name = $field['field_name'];
+    $table = $load_current ? _field_sql_storage_tablename($field) : _field_sql_storage_revision_tablename($field);
+
+    $query = db_select($table, 't')->fields('t')->condition('entity_type', $entity_type)->condition($load_current ? 'entity_id' : 'revision_id', $ids, 'IN')->condition('language', field_available_languages($entity_type, $field), 'IN')->orderBy('delta');
+
+    if (empty($options['deleted'])) {
+      $query->condition('deleted', 0);
+    }
+
+    $results = $query->execute();
+
+    $delta_count = array();
+    foreach ($results as $row) {
+      if (!isset($delta_count[$row->entity_id][$row->language])) {
+        $delta_count[$row->entity_id][$row->language] = 0;
+      }
+
+      if ($field['cardinality'] == FIELD_CARDINALITY_UNLIMITED || $delta_count[$row->entity_id][$row->language] < $field['cardinality']) {
+        $item = array();
+        // For each column declared by the field, populate the item
+        // from the prefixed database column.
+        foreach ($field['columns'] as $column => $attributes) {
+          $column_name = _field_sql_storage_columnname($field_name, $column);
+          $item[$column] = $row->$column_name;
+        }
+
+        // Add the item to the field values for the entity.
+        $entities[$row->entity_id]->{$field_name}[$row->language][] = $item;
+        $delta_count[$row->entity_id][$row->language]++;
+      }
+    }
+  }
+}
+
 
 function xpath_field_field_widget_info() {
   return array(
@@ -25,7 +116,7 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
 
   $widget = $element;
   $widget['#delta'] = $delta;
-  $xpath = $instance['widget']['settings']['xpath'];
+  $xpath = isset($instance['widget']['settings']['xpath']) ? $instance['widget']['settings']['xpath'] : '';
   
   switch ($instance['widget']['type']) {
     case 'xpath_field_xpath':
@@ -76,26 +167,20 @@ function xpath_field_field_validate($element, $form_state) {
 
 function xpath_field_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
   $element = array();
-dpm($items);
+  
   switch ($display['type']) {
     // This formatter simply outputs the field as text and with a color.
-    case 'xpath_field_xpath':
-      foreach ($items as $delta => $item) {
-        $element[$delta] = array(
-          // We create a render array to produce the desired markup,
-          // "<p style="color: #hexcolor">The color code ... #hexcolor</p>".
-          // See theme_html_tag().
-          '#type' => 'html_tag',
-          '#tag' => 'p',
-          '#attributes' => array(
-            'style' => 'color: ' . $item['rgb'],
-          ),
-          '#value' => t('The color code in this field is @code', array('@code' => $item['rgb'])),
-        );
-      }
+    case 'xpath_field_safe':
+
+      $element[0] = array(
+        
+        '#type' => 'markup',
+        '#markup' => 'Hi.',
+      );
+
       break;
   }
-
+dpm($element);
   return $element;
 }
 
