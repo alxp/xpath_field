@@ -78,14 +78,14 @@ function xpath_field_field_storage_load($entity_type, $entities, $age, $fields, 
           $xpath = _xpath_field_instance_xpath($field_instance);
           foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
             $xml = $xml_field_data['xml'];
-            $fragment = xpath_field_get_xpath_fragment($xml_field_data['xml'], $xpath);
+            $fragments = xpath_field_get_xpath_fragment($xml_field_data['xml'], $xpath);
           }
         }
-      
-      
+            
       // Add the item to the field values for the entity.
-      // TODO: Fix language code.
-      $entities[$entity_id]->{$field_name}{$entity->language}[] = (string) $fragment[0];
+      foreach ($fragments as $fragment_index => $fragment) {
+        $entities[$entity_id]->{$field_name}{$entity->language}[] = (string) $fragment;
+      }
     }    
   }
 }
@@ -162,13 +162,13 @@ function xpath_field_field_formatter_view($entity_type, $entity, $field, $instan
   switch ($display['type']) {
     // This formatter simply outputs the field as text and with a color.
     case 'xpath_field_safe':
+      foreach ($items as $index => $instance) {
+        $element[$index] = array(
 
-      $element[0] = array(
-        
-        '#type' => 'markup',
-        '#markup' => $items[0],
-      );
-
+          '#type' => 'markup',
+          '#markup' => $items[$index],
+        );
+      }
       break;
   }
 
