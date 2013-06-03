@@ -114,13 +114,13 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
     case 'xpath_field_xpath':
       $entity = isset($element['#entity']) ? $element['#entity'] : NULL;
       if ($entity) {
-        // We are attached to a node, and not in the widget instance settings form.
+        // We are attached to an entity, and not in the widget instance settings form.
         $xml_field_instance = isset($instance['widget']['settings']['xml_field_instance']) ? $instance['widget']['settings']['xml_field_instance'] : NULL;
 
         if ($xml_field_instance) {
           $lang = $entity->language;
 
-          // Check for the XML field's existence, if this is a new node it won't exist.
+          // Check for the XML field's existence, if this is a new entity it won't exist.
           if (isset($entity->{$xml_field_instance})) {
             $xml_field_data = $entity->{$xml_field_instance}[$lang];
             if (!empty($xml_field_data)) {
