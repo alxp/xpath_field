@@ -6,7 +6,7 @@ The fields aren't persisted in storage, so modifying the contents of the XML wil
 
 INSTALLATION
 
-This module depends on XML field, if that is installed then simply enable XPath Fragment the usual way.
+This module depends on XML field, if that is installed then simply enable XPath Field.
 
 Setting up fields
 
