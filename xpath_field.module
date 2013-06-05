@@ -51,8 +51,8 @@ function xml_field_field_update_field($field) {
 function xpath_field_field_storage_info() {
   return array(
     'xpath_field_storage' => array(
-      'label' => t('XPath derrived field storage'),
-      'description' => t('Transparent storage of derrived XPath fragments.'),
+      'label' => t('XPath derived field storage'),
+      'description' => t('Transparent storage of derived XPath fragments.'),
       'settings' => array(),
     ),
   );
