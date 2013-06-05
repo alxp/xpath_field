@@ -120,8 +120,8 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
         if ($xml_field_instance) {
           $lang = $entity->language;
 
-          // Check for the XML field's existence, if this is a new entity it won't exist.
-          if (isset($entity->{$xml_field_instance})) {
+          // Check for the XML field's existence, if this is a new node it won't exist.
+          if (isset($entity->{$xml_field_instance}) && isset($entity->{$xml_field_instance}[$lang])) {
             $xml_field_data = $entity->{$xml_field_instance}[$lang];
             if (!empty($xml_field_data)) {
               foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data_item) {
