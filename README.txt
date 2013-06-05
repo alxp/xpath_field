@@ -1,8 +1,8 @@
-XPath Fragment module
+XPath Field module
 
-This module extends the capabilities of the XML Field module. XML Field adds a field type for XML documents. XPath Fragment lets you add additional fields which can extract snippets from an XML Field instance and loads them as separate fields. 
+This module extends the capabilities of the XML Field module. XML Field adds a field type for XML documents. XPath Field lets you add additional fields which can extract snippets from an XML Field instance and loads them as separate fields. 
 
-The fields aren't persisted in storage, so modifying the contents of the XML will instantly be reflected in the derived XPath Fragment fields. This is useful for connecting Drupal to an XML document store where you might otherwise add large numbers of fields which need updating whenever the source document changes.
+The fields aren't persisted in storage, so modifying the contents of the XML will instantly be reflected in the derived XPath Fields. This is useful for connecting Drupal to an XML document store where you might otherwise add large numbers of fields which need updating whenever the source document changes.
 
 INSTALLATION
 
@@ -17,3 +17,7 @@ Next enter in the XPath that this new field. XPaths which return multiple result
 Now when you enter some XML into the XML Field, the XPath fragment will be extracted and behave just like any other field, and can be managed using Manage Display and themed just like any normal field.
 
 For an introduction to XPath see https://developer.mozilla.org/en-US/docs/XPath
+
+Author:
+Alexander O'Neill
+https://drupal.org/user/173521
