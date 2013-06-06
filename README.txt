@@ -10,7 +10,7 @@ Drupal core version >= 7.22 - This module calls field_info_field_map, introduced
 
 INSTALLATION
 
-This module depends on XML field, if that is installed then simply enable XPath Field.
+This module depends on XML Field (https://drupal.org/project/xml_field), if that is installed then simply enable XPath Field.
 
 Setting up fields
 
