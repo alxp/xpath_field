@@ -2,4 +2,5 @@ name = XPath Field
 description = Extract a fragment from another field of type xml_field.
 package = XML Fields
 core = 7.x
+dependencies[] = field (>=7.22)
 dependencies[] = xml_field

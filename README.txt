@@ -4,6 +4,10 @@ This module extends the capabilities of the XML Field module. XML Field adds a f
 
 The fields aren't persisted in storage, so modifying the contents of the XML will instantly be reflected in the derived XPath Fields. This is useful for connecting Drupal to an XML document store where you might otherwise add large numbers of fields which need updating whenever the source document changes.
 
+REQUIREMENTS
+
+Drupal core version >= 7.22 - This module calls field_info_field_map, introduced in Drupal 7.22.
+
 INSTALLATION
 
 This module depends on XML field, if that is installed then simply enable XPath Field.
