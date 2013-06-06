@@ -1,5 +1,11 @@
 <?php
 
+
+/**
+ * Implements hook_field_info().
+ *
+ * Provides the description of the field.
+ */
 function xpath_field_field_info() {
 
   return array(
@@ -18,6 +24,12 @@ function xpath_field_field_info() {
   );
 }
 
+/**
+ * Implementation of hook_field_create_field.
+ * 
+ * Sets the field's storage backend to our custom, non-persisting, backend.
+ * @param Array $field
+ */
 function xpath_field_field_create_field($field) {
   if ($field['type'] == 'xpath_field_xpath') {
     $field['storage'] = array(
@@ -48,6 +60,14 @@ function xml_field_field_update_field($field) {
   xpath_field_field_create_field($field);
 }
 
+/**
+ * Implementation of hook_storage_info
+ * 
+ * This info isn't properly saved by Drupal when a new vield instance is created.
+ * @see xpath_field_field_create_field for a workaround.
+ * 
+ * @return Array
+ */
 function xpath_field_field_storage_info() {
   return array(
     'xpath_field_storage' => array(
@@ -58,6 +78,18 @@ function xpath_field_field_storage_info() {
   );
 }
 
+/**
+ * Implementation of hook_field_storage_load().
+ * 
+ * Loads the XML field that this field derives its data from and runs the XPath query
+ * to build the field data that attaches to an entity.
+ * 
+ * @param string $entity_type
+ * @param array $entities
+ * @param int $age
+ * @param array $fields
+ * @param array $options
+ */
 function xpath_field_field_storage_load($entity_type, $entities, $age, $fields, $options) {
   $load_current = $age == FIELD_LOAD_CURRENT;
 
@@ -91,6 +123,11 @@ function xpath_field_field_storage_load($entity_type, $entities, $age, $fields, 
   }
 }
 
+/**
+ * Implementation of hook_widget_info().
+ * 
+ * @return array
+ */
 function xpath_field_field_widget_info() {
   return array(
     'xpath_field_xpath' => array(
@@ -104,8 +141,22 @@ function _xpath_field_instance_xpath(array $instance) {
   return isset($instance['widget']['settings']['xpath']) ? $instance['widget']['settings']['xpath'] : '';
 }
 
+/**
+ * Implementation of hook_field_widget_form().
+ * 
+ * Adds extra form elements to the node edit form. These elements are read-only and reflect
+ * the result of the field instance's XPath query on the XML field it's been configured to point to.
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @param array $field
+ * @param array $instance
+ * @param string $langcode
+ * @param array $items
+ * @param int $delta
+ * @param array $element
+ */
 function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
-
   $widget = $element;
   $widget['#delta'] = $delta;
   $xpath = _xpath_field_instance_xpath($instance);
@@ -150,6 +201,11 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
   return $element;
 }
 
+/**
+ * Implementation of hook_field_formatter_info().
+ * 
+ * @return array
+ */
 function xpath_field_field_formatter_info() {
   return array(
     // This formatter just displays the hex value in the color indicated.
@@ -160,10 +216,29 @@ function xpath_field_field_formatter_info() {
   );
 }
 
+/**
+ * Implementation of hook_field_validate().
+ * 
+ * Always returns true because the user doens't input this field directly.
+ */
 function xpath_field_field_validate($element, $form_state) {
   return TRUE;
 }
 
+/**
+ * Implementation of hook_field_formatter_view().
+ * 
+ * Puts the XPath field data into a simple markup field.
+ * 
+ * @param string $entity_type
+ * @param StdClass $entity
+ * @param array $field
+ * @param array $instance
+ * @param string $langcode
+ * @param array $items
+ * @param int $display
+ * @return array
+ */
 function xpath_field_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
   $element = array();
   
@@ -172,7 +247,6 @@ function xpath_field_field_formatter_view($entity_type, $entity, $field, $instan
     case 'xpath_field_safe':
       foreach ($items as $index => $instance) {
         $element[$index] = array(
-
           '#type' => 'markup',
           '#markup' => $items[$index],
         );
@@ -185,6 +259,8 @@ function xpath_field_field_formatter_view($entity_type, $entity, $field, $instan
 
 /**
  * Implement hook_field_widget_settings_form().
+ * 
+ * Adds settings for XML Field and XPath value.
  */
 function xpath_field_field_widget_settings_form($field, $instance) {
 
@@ -225,10 +301,23 @@ function xpath_field_field_widget_settings_form($field, $instance) {
   return $form;
 }
 
+/**
+ * Implementation of hook_field_is_empty().
+ * 
+ * Always FALSE because the field's value is populated dynamically.
+ */
 function xpath_field_field_is_empty($item, $field) {
   return FALSE;
 }
 
+/**
+ * Runs an XPath query against the XML Field and returns the SimpleXMLElement containing
+ * the results.
+ * 
+ * @param string $xml_string
+ * @param string $xpath
+ * @return SimpleXMLElement
+ */
 function xpath_field_get_xpath_fragment($xml_string, $xpath) {
   $xml = new SimpleXMLElement($xml_string);
   $result = $xml->xpath($xpath);
