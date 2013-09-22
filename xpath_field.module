@@ -100,21 +100,35 @@ function xpath_field_field_storage_load($entity_type, $entities, $age, $fields, 
     // memory upfront with field_info_field_by_ids().
     $field = field_info_field_by_id($field_id);
     $field_name = $field['field_name'];
+    
     foreach($entities as $entity_id => $entity) {
 
       $field_instance = field_info_instance($entity_type, $field_name, $entity->type);
       $xml_field_instance = isset($field_instance['widget']['settings']['xml_field_instance']) ? $field_instance['widget']['settings']['xml_field_instance'] : NULL;
 
       if ($xml_field_instance) {
-        $lang = $entity->language;
+        $lang = property_exists($entity, 'language') ? $entity->language : NULL;
         $xpath = _xpath_field_instance_xpath($field_instance);
-        foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
-          $xml = $xml_field_data['xml'];
-          $fragments = xpath_field_get_xpath_fragment($xml_field_data['xml'], $xpath);
+        if ($lang !== NULL) {
+          foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
+            $xml = $xml_field_data['xml'];
+            $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
+            if (!empty($fragments)) {
+              // Add the item to the field values for the entity.
+              foreach ($fragments as $fragment_index => $fragment) {
+                $entities[$entity_id]->{$field_name}{$entity->language}[] = (string) $fragment;
+              }
+            }
+          }
+        }
+        // Specific support for atom bundle types.
+        else if ($entity->type == 'article_bundle') {
+          $xml = $entity->atomxml;
+          $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
           if (!empty($fragments)) {
             // Add the item to the field values for the entity.
             foreach ($fragments as $fragment_index => $fragment) {
-              $entities[$entity_id]->{$field_name}{$entity->language}[] = (string) $fragment;
+              $entities[$entity_id]->{$field_name}['und'][] = (string) $fragment;
             }
           }
         }
