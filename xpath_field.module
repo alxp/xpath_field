@@ -90,50 +90,52 @@ function xpath_field_field_storage_info() {
  * @param array $fields
  * @param array $options
  */
-function xpath_field_field_storage_load($entity_type, $entities, $age, $fields, $options) {
+//function xpath_field_field_storage_load($entity_type, $entities, $age, $fields, $options) {
+function xpath_field_field_attach_load($entity_type, $entities, $age, $options) {
+
+  
+  
   $load_current = $age == FIELD_LOAD_CURRENT;
-
-  foreach ($fields as $field_id => $ids) {
-    // By the time this hook runs, the relevant field definitions have been
-    // populated and cached in FieldInfo, so calling field_info_field_by_id()
-    // on each field individually is more efficient than loading all fields in
-    // memory upfront with field_info_field_by_ids().
-    $field = field_info_field_by_id($field_id);
-    $field_name = $field['field_name'];
+  $map = field_info_field_map();
+  foreach ($entities as $entity) {
+    $bundle_name = $entity->type;
+    $entity_info = field_info_instances($entity_type, $bundle_name);
     
-    foreach($entities as $entity_id => $entity) {
+    foreach($entity as $field_name => $field) {
+      if (is_array($entity->{$field_name}) && $map[$field_name]['type'] == 'xpath_field_xpath') {
 
-      $field_instance = field_info_instance($entity_type, $field_name, $entity->type);
-      $xml_field_instance = isset($field_instance['widget']['settings']['xml_field_instance']) ? $field_instance['widget']['settings']['xml_field_instance'] : NULL;
+        $field_instance = field_info_instance($entity_type, $field_name, $entity->type);
+        $xml_field_instance = isset($field_instance['widget']['settings']['xml_field_instance']) ? $field_instance['widget']['settings']['xml_field_instance'] : NULL;
+        if ($xml_field_instance) {
+          $lang = property_exists($entity, 'language') ? $entity->language : NULL;
+          $xpath = _xpath_field_instance_xpath($field_instance);
+          if ($lang !== NULL) {
+            foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
+              $xml = $xml_field_data['xml'];
+              $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
+              if (!empty($fragments)) {
+                // Add the item to the field values for the entity.
 
-      if ($xml_field_instance) {
-        $lang = property_exists($entity, 'language') ? $entity->language : NULL;
-        $xpath = _xpath_field_instance_xpath($field_instance);
-        if ($lang !== NULL) {
-          foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
-            $xml = $xml_field_data['xml'];
+                foreach ($fragments as $fragment_index => $fragment) {
+                  $entity->{$field_name}[$entity->language][] = (string) $fragment;
+                }
+              }
+            }
+          }
+          // Specific support for atom bundle types.
+          else if ($entity->type == 'article_bundle') {
+            $xml = $entity->atomxml;
             $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
             if (!empty($fragments)) {
               // Add the item to the field values for the entity.
               foreach ($fragments as $fragment_index => $fragment) {
-                $entities[$entity_id]->{$field_name}{$entity->language}[] = (string) $fragment;
+                $entities[$entity_id]->{$field_name}['und'][] = (string) $fragment;
               }
             }
           }
         }
-        // Specific support for atom bundle types.
-        else if ($entity->type == 'article_bundle') {
-          $xml = $entity->atomxml;
-          $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
-          if (!empty($fragments)) {
-            // Add the item to the field values for the entity.
-            foreach ($fragments as $fragment_index => $fragment) {
-              $entities[$entity_id]->{$field_name}['und'][] = (string) $fragment;
-            }
-          }
-        }
       }
-    }    
+    }
   }
 }
 
@@ -294,7 +296,7 @@ function xpath_field_field_widget_settings_form($field, $instance) {
 
   $xml_field_instances = array();
   foreach (field_info_field_map() as $index => $other_field) {
-    if ($other_field['type'] == 'xml_field_xml') {
+    if (in_array($other_field['type'], array('xml_field_xml', 'apath'))) {
       foreach ($other_field['bundles'] as $other_field_bundle_type_name => $other_field_bundle_type) {
         foreach ($other_field_bundle_type as $other_field_bundle) {
           if ($other_field_bundle == $instance['bundle']) {
