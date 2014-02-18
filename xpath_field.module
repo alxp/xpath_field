@@ -56,7 +56,7 @@ function xpath_field_field_create_field($field) {
 /**
 * Implements hook_field_update_field().
 */
-function xml_field_field_update_field($field) {
+function xpath_field_field_update_field($field) {
   xpath_field_field_create_field($field);
 }
 
