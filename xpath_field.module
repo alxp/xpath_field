@@ -94,7 +94,6 @@ function xpath_field_field_storage_info() {
 function xpath_field_field_attach_load($entity_type, $entities, $age, $options) {
 
   
-  
   $load_current = $age == FIELD_LOAD_CURRENT;
   $map = field_info_field_map();
   foreach ($entities as $entity) {
@@ -105,13 +104,23 @@ function xpath_field_field_attach_load($entity_type, $entities, $age, $options) 
       if (is_array($entity->{$field_name}) && $map[$field_name]['type'] == 'xpath_field_xpath') {
 
         $field_instance = field_info_instance($entity_type, $field_name, $entity->type);
-        $xml_field_instance = isset($field_instance['widget']['settings']['xml_field_instance']) ? $field_instance['widget']['settings']['xml_field_instance'] : NULL;
+        $settings = $field_instance['widget']['settings'];
+        
+        $xml_field_instance = isset($settings['xml_field_instance']) ? $settings['xml_field_instance'] : NULL;
+        if ($settings['is_remote_path'] == True) {
+          $xml_extractor = 'xpath_field_get_xml_data_from_remote_field';
+        }
+        else {
+          $xml_extractor = 'xpath_field_get_xml_data_from_field';
+        }
+        
         if ($xml_field_instance) {
           $lang = property_exists($entity, 'language') ? $entity->language : NULL;
           $xpath = _xpath_field_instance_xpath($field_instance);
+          
           if ($lang !== NULL) {
             foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
-              $xml = $xml_field_data['xml'];
+              $xml = $xml_extractor($xml_field_data, $settings);
               $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
               if (!empty($fragments)) {
                 // Add the item to the field values for the entity.
@@ -122,20 +131,24 @@ function xpath_field_field_attach_load($entity_type, $entities, $age, $options) 
               }
             }
           }
-          // Specific support for atom bundle types.
-          else if ($entity->type == 'article_bundle') {
-            $xml = $entity->atomxml;
-            $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
-            if (!empty($fragments)) {
-              // Add the item to the field values for the entity.
-              foreach ($fragments as $fragment_index => $fragment) {
-                $entities[$entity_id]->{$field_name}['und'][] = (string) $fragment;
-              }
-            }
-          }
         }
       }
     }
+  }
+}
+
+function xpath_field_get_xml_data_from_field($xml_field_data, $settings) {
+  return $xml_field_data['xml'];
+}
+
+function xpath_field_get_xml_data_from_remote_field($xml_field_data, $settings) {
+  $prefix = $settings['url_prefix'];
+  $response = drupal_http_request($prefix . $xml_field_data['value']);
+  if ($response->code == '200') {
+    return $response->data;
+  }
+  else {
+    return FALSE;
   }
 }
 
@@ -176,13 +189,13 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
   $widget = $element;
   $widget['#delta'] = $delta;
   $xpath = _xpath_field_instance_xpath($instance);
-  
+  $settings = $instance['widget']['settings'];
   switch ($instance['widget']['type']) {
     case 'xpath_field_xpath':
       $entity = isset($element['#entity']) ? $element['#entity'] : NULL;
       if ($entity) {
         // We are attached to an entity, and not in the widget instance settings form.
-        $xml_field_instance = isset($instance['widget']['settings']['xml_field_instance']) ? $instance['widget']['settings']['xml_field_instance'] : NULL;
+        $xml_field_instance = isset($settings['xml_field_instance']) ? $settings['xml_field_instance'] : NULL;
 
         if ($xml_field_instance) {
           $lang = isset($entity->language) ? $lang = $entity->language : NULL;
@@ -190,11 +203,12 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
           // Check for the XML field's existence, if this is a new node it won't exist.
 
           if (isset($entity->{$xml_field_instance}) && ($lang == NULL || isset($entity->{$xml_field_instance}[$lang]))) {
-            $xml_field_data = $lang !== NULL ? $entity->{$xml_field_instance}[$lang] : $entity->{$xml_field_instance};
+            $xml_field_data = $entity->{$xml_field_instance}[$lang];
             if (!empty($xml_field_data)) {
               if (!is_array($xml_field_data)) {
                 $xml_field_data = array($xml_field_data);
               }
+              dpm($xml_field_data);
               foreach ($xml_field_data as $xml_field_data_item) {
                 $xml = is_array($xml_field_data_item) && array_key_exists('xml', $xml_field_data_item) ? $xml_field_data_item['xml'] : $xml_field_data_item;
                 $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
@@ -263,7 +277,6 @@ function xpath_field_field_formatter_view($entity_type, $entity, $field, $instan
   $element = array();
   
   switch ($display['type']) {
-    // This formatter simply outputs the field as text and with a color.
     case 'xpath_field_safe':
       foreach ($items as $index => $instance) {
         $element[$index] = array(
@@ -296,7 +309,7 @@ function xpath_field_field_widget_settings_form($field, $instance) {
 
   $xml_field_instances = array();
   foreach (field_info_field_map() as $index => $other_field) {
-    if (in_array($other_field['type'], array('xml_field_xml', 'apath'))) {
+    if (in_array($other_field['type'], array('xml_field_xml', 'text'))) {
       foreach ($other_field['bundles'] as $other_field_bundle_type_name => $other_field_bundle_type) {
         foreach ($other_field_bundle_type as $other_field_bundle) {
           if ($other_field_bundle == $instance['bundle']) {
@@ -307,7 +320,18 @@ function xpath_field_field_widget_settings_form($field, $instance) {
       }
     }
   }
-
+  $form['is_remote_path'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Field is remote path.',
+    '#description' => 'This field contains the path identifier from which to retrieve the XML content.',
+    '#default_value' => isset($settings['is_remote_path']) ? $settings['is_remote_path'] : FALSE,
+  );
+  $form['url_prefix'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Remote URL prefix'),
+    '#description' => t('If this is a remote XML path, this is the prefix to attach the path to to retrieve the document.'),
+    '#default_value' => isset($settings['url_prefix']) ? $settings['url_prefix'] : '',
+  );
   if (array_key_exists('xml_field_instance', $settings)) {
     $form['xml_field_instance']['#default_value'] = $settings['xml_field_instance'];
   }
