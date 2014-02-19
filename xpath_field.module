@@ -107,12 +107,7 @@ function xpath_field_field_attach_load($entity_type, $entities, $age, $options) 
         $settings = $field_instance['widget']['settings'];
         
         $xml_field_instance = isset($settings['xml_field_instance']) ? $settings['xml_field_instance'] : NULL;
-        if ($settings['is_remote_path'] == True) {
-          $xml_extractor = 'xpath_field_get_xml_data_from_remote_field';
-        }
-        else {
-          $xml_extractor = 'xpath_field_get_xml_data_from_field';
-        }
+        $xml_extractor = xpath_field_get_xml_extractor($settings);
         
         if ($xml_field_instance) {
           $lang = property_exists($entity, 'language') ? $entity->language : NULL;
@@ -190,6 +185,7 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
   $widget['#delta'] = $delta;
   $xpath = _xpath_field_instance_xpath($instance);
   $settings = $instance['widget']['settings'];
+  $xml_extractor = xpath_field_get_xml_extractor($settings);
   switch ($instance['widget']['type']) {
     case 'xpath_field_xpath':
       $entity = isset($element['#entity']) ? $element['#entity'] : NULL;
@@ -208,9 +204,9 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
               if (!is_array($xml_field_data)) {
                 $xml_field_data = array($xml_field_data);
               }
-              dpm($xml_field_data);
+              
               foreach ($xml_field_data as $xml_field_data_item) {
-                $xml = is_array($xml_field_data_item) && array_key_exists('xml', $xml_field_data_item) ? $xml_field_data_item['xml'] : $xml_field_data_item;
+                $xml = $xml_extractor($xml_field_data_item, $settings);
                 $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
               }
             }
@@ -366,4 +362,14 @@ function xpath_field_get_xpath_fragment($xml_string, $xpath) {
   $xml = new SimpleXMLElement($xml_string);
   $result = $xml->xpath($xpath);
   return $result;
+}
+
+function xpath_field_get_xml_extractor($settings) {
+  if ($settings['is_remote_path'] == True) {
+    $xml_extractor = 'xpath_field_get_xml_data_from_remote_field';
+  }
+  else {
+    $xml_extractor = 'xpath_field_get_xml_data_from_field';
+  }
+  return $xml_extractor;
 }
