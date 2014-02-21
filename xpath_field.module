@@ -103,28 +103,12 @@ function xpath_field_field_attach_load($entity_type, $entities, $age, $options) 
     foreach($entity as $field_name => $field) {
       if (is_array($entity->{$field_name}) && $map[$field_name]['type'] == 'xpath_field_xpath') {
 
-        $field_instance = field_info_instance($entity_type, $field_name, $entity->type);
-        $settings = $field_instance['widget']['settings'];
-        
-        $xml_field_instance = isset($settings['xml_field_instance']) ? $settings['xml_field_instance'] : NULL;
-        $xml_extractor = xpath_field_get_xml_extractor($settings);
-        
-        if ($xml_field_instance) {
-          $lang = property_exists($entity, 'language') ? $entity->language : NULL;
-          $xpath = _xpath_field_instance_xpath($field_instance);
+        $fragments = xpath_field_extract_fragments($entity_type, $entity, $field_name, $field);
+        if (!empty($fragments)) {
+          // Add the item to the field values for the entity.
           
-          if ($lang !== NULL) {
-            foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
-              $xml = $xml_extractor($xml_field_data, $settings);
-              $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
-              if (!empty($fragments)) {
-                // Add the item to the field values for the entity.
-
-                foreach ($fragments as $fragment_index => $fragment) {
-                  $entity->{$field_name}[$entity->language][] = (string) $fragment;
-                }
-              }
-            }
+          foreach ($fragments as $fragment_index => $fragment) {
+            $entity->{$field_name}[$entity->language][] = (string) $fragment;
           }
         }
       }
@@ -189,6 +173,7 @@ function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, 
   switch ($instance['widget']['type']) {
     case 'xpath_field_xpath':
       $entity = isset($element['#entity']) ? $element['#entity'] : NULL;
+      
       if ($entity) {
         // We are attached to an entity, and not in the widget instance settings form.
         $xml_field_instance = isset($settings['xml_field_instance']) ? $settings['xml_field_instance'] : NULL;
@@ -359,8 +344,13 @@ function xpath_field_field_is_empty($item, $field) {
  * @return SimpleXMLElement
  */
 function xpath_field_get_xpath_fragment($xml_string, $xpath) {
-  $xml = new SimpleXMLElement($xml_string);
-  $result = $xml->xpath($xpath);
+  $result = array();
+  try {
+    $xml = new SimpleXMLElement($xml_string);
+    $result = $xml->xpath($xpath);
+  } catch (Exception $e) {
+    drupal_set_message($e->getMessage());
+  }
   return $result;
 }
 
@@ -372,4 +362,24 @@ function xpath_field_get_xml_extractor($settings) {
     $xml_extractor = 'xpath_field_get_xml_data_from_field';
   }
   return $xml_extractor;
+}
+
+function xpath_field_extract_fragments($entity_type, $entity, $field_name, $field) {
+
+  $field_instance = field_info_instance($entity_type, $field_name, $entity->type);
+  $settings = $field_instance['widget']['settings'];
+  $xml_extractor = xpath_field_get_xml_extractor($settings);
+  
+  $xml_field_instance = isset($settings['xml_field_instance']) ? $settings['xml_field_instance'] : NULL;
+  if ($xml_field_instance) {
+    $lang = property_exists($entity, 'language') ? $entity->language : NULL;
+    $xpath = _xpath_field_instance_xpath($field_instance);
+    if ($lang !== NULL) {
+      foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
+        $xml = $xml_extractor($xml_field_data, $settings);
+        $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
+      }
+    }
+  }
+  return $fragments;
 }
