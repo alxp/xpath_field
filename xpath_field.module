@@ -165,50 +165,24 @@ function _xpath_field_instance_xpath(array $instance) {
  * @param array $element
  */
 function xpath_field_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
-  $widget = $element;
-  $widget['#delta'] = $delta;
+
   $xpath = _xpath_field_instance_xpath($instance);
-  $settings = $instance['widget']['settings'];
-  $xml_extractor = xpath_field_get_xml_extractor($settings);
+
   switch ($instance['widget']['type']) {
     case 'xpath_field_xpath':
+      
       $entity = isset($element['#entity']) ? $element['#entity'] : NULL;
       
       if ($entity) {
         // We are attached to an entity, and not in the widget instance settings form.
-        $xml_field_instance = isset($settings['xml_field_instance']) ? $settings['xml_field_instance'] : NULL;
 
-        if ($xml_field_instance) {
-          $lang = isset($entity->language) ? $lang = $entity->language : NULL;
+        $element['xpath_element'] = array(
+          '#type' => 'textfield',
+          '#title' => "{$instance['label']} (Derrived with $xpath)",
+          '#value' => $entity->{$instance['field_name']}[$element['#language']][$delta],
+          '#attributes' => array('readonly' => 'readonly'),
 
-          // Check for the XML field's existence, if this is a new node it won't exist.
-
-          if (isset($entity->{$xml_field_instance}) && ($lang == NULL || isset($entity->{$xml_field_instance}[$lang]))) {
-            $xml_field_data = $entity->{$xml_field_instance}[$lang];
-            if (!empty($xml_field_data)) {
-              if (!is_array($xml_field_data)) {
-                $xml_field_data = array($xml_field_data);
-              }
-              
-              foreach ($xml_field_data as $xml_field_data_item) {
-                $xml = $xml_extractor($xml_field_data_item, $settings);
-                $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
-              }
-            }
-          }
-        }
-        
-        if (isset($fragments[$delta])) {
-          $element = array();
-          $element['xpath_element'] = array(
-            '#type' => 'textfield',
-            '#title' => $instance['label'] . " (Derrived)",
-            '#enabled' => FALSE,
-            '#value' => '',
-          );
-
-          $element['xpath_element']['#value'] = (string)$fragments[$delta];
-        }
+        );
         break;
       }
   }
@@ -365,7 +339,6 @@ function xpath_field_get_xml_extractor($settings) {
 }
 
 function xpath_field_extract_fragments($entity_type, $entity, $field_name, $field) {
-
   $field_instance = field_info_instance($entity_type, $field_name, $entity->type);
   $settings = $field_instance['widget']['settings'];
   $xml_extractor = xpath_field_get_xml_extractor($settings);
