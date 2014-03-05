@@ -1,6 +1,5 @@
 <?php
 
-
 /**
  * Implements hook_field_info().
  *
@@ -78,6 +77,10 @@ function xpath_field_field_storage_info() {
   );
 }
 
+function xpath_field_field_storage_query(EntityFieldQuery $query) {
+
+}
+
 /**
  * Implementation of hook_field_storage_load().
  * 
@@ -90,10 +93,7 @@ function xpath_field_field_storage_info() {
  * @param array $fields
  * @param array $options
  */
-//function xpath_field_field_storage_load($entity_type, $entities, $age, $fields, $options) {
 function xpath_field_field_attach_load($entity_type, $entities, $age, $options) {
-
-  
   $load_current = $age == FIELD_LOAD_CURRENT;
   $map = field_info_field_map();
   foreach ($entities as $entity) {
@@ -106,7 +106,6 @@ function xpath_field_field_attach_load($entity_type, $entities, $age, $options) 
         $fragments = xpath_field_extract_fragments($entity_type, $entity, $field_name, $field);
         if (!empty($fragments)) {
           // Add the item to the field values for the entity.
-          
           foreach ($fragments as $fragment_index => $fragment) {
             $entity->{$field_name}[$entity->language][] = (string) $fragment;
           }
