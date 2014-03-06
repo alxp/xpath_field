@@ -1,5 +1,9 @@
 <?php
 
+/*
+ * Field API funcitons.
+ */
+
 /**
  * Implements hook_field_info().
  *
@@ -107,7 +111,7 @@ function xpath_field_field_attach_load($entity_type, $entities, $age, $options) 
         if (!empty($fragments)) {
           // Add the item to the field values for the entity.
           foreach ($fragments as $fragment_index => $fragment) {
-            $entity->{$field_name}[$entity->language][] = (string) $fragment;
+            $entity->{$field_name}[$entity->language][] = $fragment->asXml();
           }
         }
       }
@@ -120,12 +124,13 @@ function xpath_field_get_xml_data_from_field($xml_field_data, $settings) {
 }
 
 function xpath_field_get_xml_data_from_remote_field($xml_field_data, $settings) {
-  $prefix = $settings['url_prefix'];
+  $prefix = $settings['url_prefix']['use_default'] ? variable_get('xpath_field_default_url_prefix') : $settings['url_prefix']['prefix'];
   $response = drupal_http_request($prefix . $xml_field_data['value']);
   if ($response->code == '200') {
     return $response->data;
   }
   else {
+    watchdog('xpath_field', t('Got error @code form XML data source. Message: @message', array('@code' => $response->code, '@message' => $response->error)), NULL, WATCHDOG_ERROR);
     return FALSE;
   }
 }
@@ -281,10 +286,19 @@ function xpath_field_field_widget_settings_form($field, $instance) {
     '#default_value' => isset($settings['is_remote_path']) ? $settings['is_remote_path'] : FALSE,
   );
   $form['url_prefix'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Remote field URL Prefix',
+  );
+  $form['url_prefix']['use_default'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use default (@default)', array('@default' => variable_get('xpath_field_default_url_prefix'))),
+    '#default_value' => isset($settings['url_prefix']['use_default']) ? $settings['url_prefix']['use_default'] : TRUE,
+  );
+  $form['url_prefix']['prefix'] = array(
     '#type' => 'textfield',
-    '#title' => t('Remote URL prefix'),
+    '#title' => t('Or, use a custom URL prefix for this field instance'),
     '#description' => t('If this is a remote XML path, this is the prefix to attach the path to to retrieve the document.'),
-    '#default_value' => isset($settings['url_prefix']) ? $settings['url_prefix'] : '',
+    '#default_value' => isset($settings['url_prefix']['prefix']) ? $settings['url_prefix']['prefix'] : '',
   );
   if (array_key_exists('xml_field_instance', $settings)) {
     $form['xml_field_instance']['#default_value'] = $settings['xml_field_instance'];
@@ -296,7 +310,31 @@ function xpath_field_field_widget_settings_form($field, $instance) {
     '#description' => t('Enter the XPath to select a fragment from the XML Field instance.'),
     '#default_value' => array_key_exists('xpath', $settings) ? $settings['xpath'] : '',
   );
+
   return $form;
+}
+
+/**
+ * Implementation of hook_form_field_ui_field_edit_form_alter().
+ * Add a submit handler so we can clear Drupal's field cache.
+ * @param Array $form
+ * @param Array $form_state
+ */
+function xpath_field_form_field_ui_field_edit_form_alter(&$form, &$form_state) {
+  if ($form['#field']['module'] == 'xpath_field') {
+    $form['#submit'][] = 'xpath_field_widget_settings_form_submit';
+  }
+}
+
+/**
+ * Since Drupal caches field contents we need to clear the field cache when the 
+ * user changes the field settings.
+ * @param Array $form
+ * @param Array $form_state
+ */
+function xpath_field_widget_settings_form_submit($form, &$form_state) {
+  drupal_set_message(t('The field cache has been cleared.'));
+  field_cache_clear();
 }
 
 /**
@@ -307,6 +345,10 @@ function xpath_field_field_widget_settings_form($field, $instance) {
 function xpath_field_field_is_empty($item, $field) {
   return FALSE;
 }
+
+/*
+ * XML utility functions.
+ */
 
 /**
  * Runs an XPath query against the XML Field and returns the SimpleXMLElement containing
@@ -354,4 +396,46 @@ function xpath_field_extract_fragments($entity_type, $entity, $field_name, $fiel
     }
   }
   return $fragments;
+}
+
+/*
+ * Drupal admin menu functions.
+ */
+
+/**
+ * Implementation of hook_menu().
+ */
+function xpath_field_menu() {
+  $menu = array(
+    'admin/config/xpath-field' => array(
+      'title' => t('XPath Field'),
+      'description' => t('XPath Field global settings.'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('xpath_field_settings_form'),
+      'access arguments' => array('access administration pages'),
+    ),
+  );
+  return $menu;
+}
+
+function xpath_field_settings_form($form, &$form_state) {
+  $form['xpath_field_default_url_prefix'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Default URL prefix'),
+    '#description' => t('For XML fields stored on remote servers, you can provide a default root URL that paths in field data will be appended to. E.g., "http://www.example.com/xml".'),
+    '#default_value' => variable_get('xpath_field_default_url_prefix'),
+    '#required' => FALSE,
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+  
+  return $form;
+}
+
+function xpath_field_settings_form_submit($form, &$form_state) {
+  variable_set('xpath_field_default_url_prefix', $form_state['values']['xpath_field_default_url_prefix']);
+  drupal_set_message(t('Saved XPath field settings.'), 'status');
 }
