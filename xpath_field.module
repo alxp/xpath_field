@@ -111,7 +111,7 @@ function xpath_field_field_attach_load($entity_type, $entities, $age, $options) 
         if (!empty($fragments)) {
           // Add the item to the field values for the entity.
           foreach ($fragments as $fragment_index => $fragment) {
-            $entity->{$field_name}[$entity->language][] = $fragment->asXml();
+            $entity->{$field_name}[$entity->language][] = array('value' => $fragment->asXml());
           }
         }
       }
@@ -218,6 +218,16 @@ function xpath_field_field_validate($element, $form_state) {
   return TRUE;
 }
 
+/*
+ * Field formatter functions.
+ */
+function xpath_field_field_formatter_info_alter(&$info) {
+  
+  $info['text_default']['field types'][] = 'xpath_field_xpath';
+  $info['xsl_formatter']['field types'][] = 'xpath_field_xpath';
+  
+}
+
 /**
  * Implementation of hook_field_formatter_view().
  * 
@@ -234,7 +244,7 @@ function xpath_field_field_validate($element, $form_state) {
  */
 function xpath_field_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
   $element = array();
-  
+
   switch ($display['type']) {
     case 'xpath_field_safe':
       foreach ($items as $index => $instance) {
@@ -407,7 +417,7 @@ function xpath_field_extract_fragments($entity_type, $entity, $field_name, $fiel
  */
 function xpath_field_menu() {
   $menu = array(
-    'admin/config/xpath-field' => array(
+    'admin/config/content/xpath-field' => array(
       'title' => t('XPath Field'),
       'description' => t('XPath Field global settings.'),
       'page callback' => 'drupal_get_form',
@@ -422,7 +432,7 @@ function xpath_field_settings_form($form, &$form_state) {
   $form['xpath_field_default_url_prefix'] = array(
     '#type' => 'textfield',
     '#title' => t('Default URL prefix'),
-    '#description' => t('For XML fields stored on remote servers, you can provide a default root URL that paths in field data will be appended to. E.g., "http://www.example.com/xml".'),
+    '#description' => t('For XML fields stored on remote servers, you can provide a default root URL that paths in field data will be appended to. E.g., "http://www.example.com/xml". If the field value contains a leading slash, then don\'t include a trailing slash in this field.'),
     '#default_value' => variable_get('xpath_field_default_url_prefix'),
     '#required' => FALSE,
   );
