@@ -111,7 +111,7 @@ function xpath_field_field_attach_load($entity_type, $entities, $age, $options) 
         if (!empty($fragments)) {
           // Add the item to the field values for the entity.
           foreach ($fragments as $fragment_index => $fragment) {
-            $entity->{$field_name}[$entity->language][] = array('value' => $fragment->asXml());
+            $entity->{$field_name}[$entity->language][] = array('value' => $fragment);
           }
         }
       }
@@ -224,7 +224,6 @@ function xpath_field_field_validate($element, $form_state) {
 function xpath_field_field_formatter_info_alter(&$info) {
   
   $info['text_default']['field types'][] = 'xpath_field_xpath';
-  $info['xsl_formatter']['field types'][] = 'xpath_field_xpath';
   
 }
 
@@ -244,16 +243,16 @@ function xpath_field_field_formatter_info_alter(&$info) {
  */
 function xpath_field_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
   $element = array();
-
   switch ($display['type']) {
-    case 'xpath_field_safe':
-      foreach ($items as $index => $instance) {
-        $element[$index] = array(
-          '#type' => 'markup',
-          '#markup' => $items[$index],
-        );
-      }
-      break;
+  case 'xpath_field_safe':
+    foreach ($items as $index => $instance) {
+      $element[$index] = array(
+        '#type' => 'markup',
+        '#markup' => $items[$index]['value'],
+      );
+    }
+    break;
+   
   }
 
   return $element;
@@ -268,7 +267,7 @@ function xpath_field_field_widget_settings_form($field, $instance) {
 
   $widget = $instance['widget'];
   $settings = $widget['settings'];
-
+  
   $form = array();
   $form['xml_field_instance'] = array(
     '#type' => 'select',
@@ -314,14 +313,89 @@ function xpath_field_field_widget_settings_form($field, $instance) {
     $form['xml_field_instance']['#default_value'] = $settings['xml_field_instance'];
   }
 
+  if (module_exists('xsl_formatter')) {
+    $form['use_xslt'] = array(
+      '#title' => t('Use an XSL transformation.'),
+      '#type' => 'select',
+      '#description' => t('Choose an XSLT stylesheet to use to transform the XML content.'),
+      '#options' => array(
+        'xpath' => 'XPath query',
+        'xslt' => 'XSLT transformation',
+      ),
+      '#default_value' => isset($settings['use_xslt']) ? $settings['use_xslt'] : 'xpath',
+    );
+    
+    $xsl_enabled_states = array(
+      'enabled' => array(
+        ':input[name="instance[widget][settings][use_xslt]"]' => array('value' => 'xslt'),
+      ),
+    );
+    
+    $xsls = xsl_formatter_enumerate_xsls();
+    $form['xsl_path'] = array(
+      '#title' => t('XSL path'),
+      '#type' => 'select',
+      '#default_value' => $settings['xsl_path'],
+      '#element_validate' => array('xpath_field_xsl_path_validate'),
+      '#description' => t("Path to the location of the XSL file. Search will be made relative to the files/xsl directory, then the module directory."),
+      '#options' => $xsls,
+      '#required' => FALSE,
+      '#states' => $xsl_enabled_states,
+    );
+
+    // file upload needs an explicit name. This is horrid sorry
+    $upload_field_id = 'files[' . drupal_clean_css_identifier("files[instance][widget][settings][xsl_upload]") . ']';
+    $form['xsl_upload'] = array(
+      '#type' => 'file',
+      '#title' => t('Upload XSL file'),
+      '#maxlength' => 40,
+      '#description' => t("This will be placed in your files/xsl folder where it can be found and re-used."),
+      '#element_validate' => array('xsl_formatter_xsl_upload_validate'),
+      '#name' => $upload_field_id,
+      '#states' => $xsl_enabled_states,
+    );
+    $module_path = drupal_get_path('module', 'xsl_formatter');
+    $form['xsl_params'] = array(
+      '#title' => t('Additional params'),
+      '#type' => 'textarea',
+      '#rows' => 2,
+      '#cols' => 24,
+      '#description' => t("Additional parameters that the Transformation stylesheet may expect. Use JSON format, eg <pre>{\"indent-elements\":true, \"css-stylesheet\":\"$module_path/xsl/xmlverbatim.css\"}</pre>"),
+      '#default_value' => $settings['xsl_params'],
+      '#element_validate' => array('xsl_formatter_xsl_params_validate'),
+      '#states' => $xsl_enabled_states,
+    );
+    $form['debug'] = array(
+      '#title' => t('Show XML parsing warnings'),
+      '#type' => 'checkbox',
+      '#description' => t("Bad XML data input will trigger warnings that may show on screen. Disable this for a public site."),
+      '#default_value' => $settings['debug'],
+      '#states' => $xsl_enabled_states,
+    );  
+  }
   $form['xpath'] = array(
     '#type' => 'textfield',
     '#title' => t('XPath value'),
     '#description' => t('Enter the XPath to select a fragment from the XML Field instance.'),
     '#default_value' => array_key_exists('xpath', $settings) ? $settings['xpath'] : '',
+    '#states' => array(
+      'enabled' => array(
+        ':input[name="instance[widget][settings][use_xslt]"]' => array('value' => 'xpath'),
+      ),
+    ),    
   );
-
+  
   return $form;
+}
+
+/**
+ * Ensure the named path exists. This includes a small search lookup.
+ */
+function xpath_field_xsl_path_validate($element, &$form_state, $form) {
+  $settings = $form_state['values']['instance']['widget']['settings'];
+  if ($settings['use_xslt'] === 'xslt') {
+    xsl_formatter_xsl_path_validate($element, $form_state, $form);
+  }
 }
 
 /**
@@ -366,15 +440,44 @@ function xpath_field_field_is_empty($item, $field) {
  * 
  * @param string $xml_string
  * @param string $xpath
- * @return SimpleXMLElement
+ * @return string The XML result.
  */
 function xpath_field_get_xpath_fragment($xml_string, $xpath) {
-  $result = array();
+  $results = array();
+  $resultsXML = array();
   try {
     $xml = new SimpleXMLElement($xml_string);
-    $result = $xml->xpath($xpath);
+    $results = $xml->xpath($xpath);
   } catch (Exception $e) {
     drupal_set_message($e->getMessage());
+  }
+  if (!empty($results)) {
+    foreach($results as $result) {
+      $resultsXML[] = $result->asXml();
+    }
+  }
+  return $resultsXML;
+}
+
+function xpath_field_apply_xsl_transformation($xml_string, $xsl_path, $xsl_params, $debug = FALSE) {
+  $xml_doc = new DomDocument;
+  try {
+    if ($debug) {
+      $xml_doc->loadXml($xml_string);
+    }
+    else {
+      @$xml_doc->loadXml($xml_string);
+    }
+    
+    $xsl_doc = xsl_formatter_get_xml_doc($xsl_path);
+    $params = (array)json_decode($xsl_params);
+    // 'base' can be used for supporting relative css links.
+    $params['base'] = url(dirname($xsl_doc->documenturi));
+    // Transform
+    $result = xsl_formatter_xmldoc_plus_xsldoc($xml_doc, $xsl_doc, $params);
+  }
+  catch (Exception $e) {
+    watchdog('xpath_field', "Unable to parse the XML data or transform it. %message", array('%message' => $e->getMessage()), E_USER_ERROR);
   }
   return $result;
 }
@@ -401,12 +504,60 @@ function xpath_field_extract_fragments($entity_type, $entity, $field_name, $fiel
     if ($lang !== NULL) {
       foreach ($entity->{$xml_field_instance}[$lang] as $xml_field_data) {
         $xml = $xml_extractor($xml_field_data, $settings);
-        $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
+        
+        switch($settings['use_xslt']) {
+        case 'xpath':
+          $fragments = xpath_field_get_xpath_fragment($xml, $xpath);
+          break;
+          
+        case 'xslt':
+          $fragments = array(xpath_field_apply_xsl_transformation($xml, $settings['xsl_path'], $settings['xsl_params']));
+          break;
+        }
       }
     }
   }
   return $fragments;
 }
+
+/**
+ * If we upload our own xsl, Make sure it gets saved.
+ *
+ * Place it in the public xsl foilder and refer to it.
+ */
+function xpath_field_xsl_upload_validate($element, &$form_state, $form) {
+  // Check for a new uploaded xsl.
+  // Figure out what the big ID was. This is wierd.
+  $upload_field_id = 'files-' . substr($element['#id'], strlen('edit-'));
+
+  // Get it. Temporary at first.
+  $validators = array('file_validate_extensions' => array('xsl','xslt'));
+  $file = file_save_upload($upload_field_id, $validators);
+
+  if (!empty($file)) {
+    // File upload was attempted.
+    if ($file) {
+      $save_dir  = "public://xsl";
+      file_prepare_directory($save_dir, FILE_CREATE_DIRECTORY);
+      $save_filepath = $save_dir . '/' . $file->filename;
+      $filename = file_unmanaged_copy($file->uri, $save_filepath, FILE_EXISTS_REPLACE);
+
+      // Set xsl_path to the newly uploaded value.
+      // The #parents array is important.
+      // Find the nearby xsl_path element with the same ancestry as me.
+      $parents = $element['#parents'];
+      array_pop($parents);
+      array_push($parents, 'xsl_path');
+      $xsl_path_element = array('#parents' => $parents);
+      form_set_value($xsl_path_element, $save_filepath, $form_state);
+    }
+    else {
+      // File upload failed.
+      form_set_error('xsl_upload', t('The xsl could not be uploaded.'));
+    }
+  }
+}
+
 
 /*
  * Drupal admin menu functions.
