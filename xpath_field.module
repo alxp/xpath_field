@@ -101,11 +101,13 @@ function xpath_field_field_attach_load($entity_type, $entities, $age, $options) 
   $load_current = $age == FIELD_LOAD_CURRENT;
   $map = field_info_field_map();
   foreach ($entities as $entity) {
-    $bundle_name = $entity->type;
+    $bundle_name = property_exists($entity, 'type') ? $entity->type : NULL;
     $entity_info = field_info_instances($entity_type, $bundle_name);
     
     foreach($entity as $field_name => $field) {
-      if (is_array($entity->{$field_name}) && $map[$field_name]['type'] == 'xpath_field_xpath') {
+      if (is_array($entity->{$field_name})
+          && array_key_exists($field_name, $map)
+          && $map[$field_name]['type'] == 'xpath_field_xpath') {
 
         $fragments = xpath_field_extract_fragments($entity_type, $entity, $field_name, $field);
         if (!empty($fragments)) {
@@ -120,7 +122,9 @@ function xpath_field_field_attach_load($entity_type, $entities, $age, $options) 
 }
 
 function xpath_field_get_xml_data_from_field($xml_field_data, $settings) {
-  return $xml_field_data['xml'];
+  // XML FIeld puts its data in a key named 'xml'. All other supported
+  // fields store their data in 'value'.
+  return array_key_exists('xml', $xml_field_data) ? $xml_field_data['xml'] : $xml_field_data['value'];
 }
 
 function xpath_field_get_xml_data_from_remote_field($xml_field_data, $settings) {
@@ -277,7 +281,7 @@ function xpath_field_field_widget_settings_form($field, $instance) {
 
   $xml_field_instances = array();
   foreach (field_info_field_map() as $index => $other_field) {
-    if (in_array($other_field['type'], array('xml_field_xml', 'text'))) {
+    if (in_array($other_field['type'], array('xml_field_xml', 'text', 'text_long', 'text_with_summary'))) {
       foreach ($other_field['bundles'] as $other_field_bundle_type_name => $other_field_bundle_type) {
         foreach ($other_field_bundle_type as $other_field_bundle) {
           if ($other_field_bundle == $instance['bundle']) {
@@ -313,66 +317,72 @@ function xpath_field_field_widget_settings_form($field, $instance) {
     $form['xml_field_instance']['#default_value'] = $settings['xml_field_instance'];
   }
 
-  if (module_exists('xsl_formatter')) {
-    $form['use_xslt'] = array(
-      '#title' => t('Use an XSL transformation.'),
-      '#type' => 'select',
-      '#description' => t('Choose an XSLT stylesheet to use to transform the XML content.'),
-      '#options' => array(
-        'xpath' => 'XPath query',
-        'xslt' => 'XSLT transformation',
-      ),
-      '#default_value' => isset($settings['use_xslt']) ? $settings['use_xslt'] : 'xpath',
-    );
-    
-    $xsl_enabled_states = array(
-      'enabled' => array(
-        ':input[name="instance[widget][settings][use_xslt]"]' => array('value' => 'xslt'),
-      ),
-    );
-    
-    $xsls = xsl_formatter_enumerate_xsls();
-    $form['xsl_path'] = array(
-      '#title' => t('XSL path'),
-      '#type' => 'select',
-      '#default_value' => $settings['xsl_path'],
-      '#element_validate' => array('xpath_field_xsl_path_validate'),
-      '#description' => t("Path to the location of the XSL file. Search will be made relative to the files/xsl directory, then the module directory."),
-      '#options' => $xsls,
-      '#required' => FALSE,
-      '#states' => $xsl_enabled_states,
-    );
+  $xsl_formatter_enabled = module_exists('xsl_formatter');
 
-    // file upload needs an explicit name. This is horrid sorry
-    $upload_field_id = 'files[' . drupal_clean_css_identifier("files[instance][widget][settings][xsl_upload]") . ']';
-    $form['xsl_upload'] = array(
-      '#type' => 'file',
-      '#title' => t('Upload XSL file'),
-      '#maxlength' => 40,
-      '#description' => t("This will be placed in your files/xsl folder where it can be found and re-used."),
-      '#element_validate' => array('xsl_formatter_xsl_upload_validate'),
-      '#name' => $upload_field_id,
-      '#states' => $xsl_enabled_states,
-    );
-    $module_path = drupal_get_path('module', 'xsl_formatter');
-    $form['xsl_params'] = array(
-      '#title' => t('Additional params'),
+  $form['use_xslt'] = array(
+    '#title' => t('Use an XSL transformation.'),
+    '#type' => 'select',
+    '#description' => t('Choose an XSLT stylesheet to use to transform the XML content.'),
+    '#options' => array(
+      'xpath' => 'XPath query',
+      'xslt' => 'XSLT transformation',
+    ),
+    '#access' => $xsl_formatter_enabled,
+    '#default_value' => isset($settings['use_xslt']) ? $settings['use_xslt'] : 'xpath',
+  );
+    
+  $xsl_enabled_states = array(
+    'enabled' => array(
+      ':input[name="instance[widget][settings][use_xslt]"]' => array('value' => 'xslt'),
+    ),
+  );
+  
+  $xsls = $xsl_formatter_enabled ? xsl_formatter_enumerate_xsls(): array();
+  $form['xsl_path'] = array(
+    '#title' => t('XSL path'),
+    '#type' => 'select',
+    '#default_value' => $settings['xsl_path'],
+    '#element_validate' => array('xpath_field_xsl_path_validate'),
+    '#description' => t("Path to the location of the XSL file. Search will be made relative to the files/xsl directory, then the module directory."),
+    '#options' => $xsls,
+    '#required' => FALSE,
+    '#states' => $xsl_enabled_states,
+    '#access' => $xsl_formatter_enabled,
+  );
+  
+  // file upload needs an explicit name. This is horrid sorry
+  $upload_field_id = 'files[' . drupal_clean_css_identifier("files[instance][widget][settings][xsl_upload]") . ']';
+  $form['xsl_upload'] = array(
+    '#type' => 'file',
+    '#title' => t('Upload XSL file'),
+    '#maxlength' => 40,
+    '#description' => t("This will be placed in your files/xsl folder where it can be found and re-used."),
+    '#element_validate' => $xsl_formatter_enabled ?  array('xsl_formatter_xsl_upload_validate') : array(),
+    '#name' => $upload_field_id,
+    '#states' => $xsl_enabled_states,
+    '#access' => $xsl_formatter_enabled,
+  );
+  $module_path = drupal_get_path('module', 'xsl_formatter');
+  $form['xsl_params'] = array(
+    '#title' => t('Additional params'),
       '#type' => 'textarea',
-      '#rows' => 2,
-      '#cols' => 24,
-      '#description' => t("Additional parameters that the Transformation stylesheet may expect. Use JSON format, eg <pre>{\"indent-elements\":true, \"css-stylesheet\":\"$module_path/xsl/xmlverbatim.css\"}</pre>"),
+    '#rows' => 2,
+    '#cols' => 24,
+    '#description' => t("Additional parameters that the Transformation stylesheet may expect. Use JSON format, eg <pre>{\"indent-elements\":true, \"css-stylesheet\":\"$module_path/xsl/xmlverbatim.css\"}</pre>"),
       '#default_value' => $settings['xsl_params'],
-      '#element_validate' => array('xsl_formatter_xsl_params_validate'),
-      '#states' => $xsl_enabled_states,
-    );
-    $form['debug'] = array(
-      '#title' => t('Show XML parsing warnings'),
-      '#type' => 'checkbox',
-      '#description' => t("Bad XML data input will trigger warnings that may show on screen. Disable this for a public site."),
-      '#default_value' => $settings['debug'],
-      '#states' => $xsl_enabled_states,
-    );  
-  }
+    '#element_validate' => $xsl_formatter_enabled ? array('xsl_formatter_xsl_params_validate') : array(),
+    '#states' => $xsl_enabled_states,
+    '#access' => $xsl_formatter_enabled,
+  );
+  $form['debug'] = array(
+    '#title' => t('Show XML parsing warnings'),
+    '#type' => 'checkbox',
+    '#description' => t("Bad XML data input will trigger warnings that may show on screen. Disable this for a public site."),
+    '#default_value' => $settings['debug'],
+    '#states' => $xsl_enabled_states,
+    '#access' => $xsl_formatter_enabled,
+  );  
+  
   $form['xpath'] = array(
     '#type' => 'textfield',
     '#title' => t('XPath value'),
